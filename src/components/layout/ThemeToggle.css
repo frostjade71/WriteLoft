@@ -1,0 +1,50 @@
+.theme-switch-wrapper .theme-checkbox {
+    --toggle-size: 10px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 5.5em;
+    height: 2.75em;
+    background: -webkit-gradient(linear, left top, right top, color-stop(50%, #eff6ff), color-stop(50%, #1e293b)) no-repeat;
+    background: -o-linear-gradient(left, #eff6ff 50%, #1e293b 50%) no-repeat;
+    background: linear-gradient(to right, #eff6ff 50%, #1e293b 50%) no-repeat;
+    background-size: 205%;
+    background-position: 0;
+    -webkit-transition: 0.4s;
+    -o-transition: 0.4s;
+    transition: 0.4s;
+    border-radius: 99em;
+    position: relative;
+    cursor: pointer;
+    font-size: var(--toggle-size);
+    outline: none;
+    border: 1px solid var(--border);
+}
+
+.theme-switch-wrapper .theme-checkbox::before {
+    content: "";
+    width: 2em;
+    height: 2em;
+    position: absolute;
+    top: 0.3125em;
+    left: 0.3125em;
+    background: -webkit-gradient(linear, left top, right top, color-stop(50%, #eff6ff), color-stop(50%, #1e293b)) no-repeat;
+    background: -o-linear-gradient(left, #eff6ff 50%, #1e293b 50%) no-repeat;
+    background: linear-gradient(to right, #eff6ff 50%, #1e293b 50%) no-repeat;
+    background-size: 205%;
+    background-position: 100%;
+    border-radius: 50%;
+    -webkit-transition: 0.4s;
+    -o-transition: 0.4s;
+    transition: 0.4s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.theme-switch-wrapper .theme-checkbox:checked::before {
+    left: calc(100% - 2em - 0.3125em);
+    background-position: 0;
+}
+
+.theme-switch-wrapper .theme-checkbox:checked {
+    background-position: 100%;
+}

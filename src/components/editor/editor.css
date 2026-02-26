@@ -1,0 +1,87 @@
+/* TipTap Editor overrides and formatting */
+.ProseMirror {
+    min-height: calc(100vh - 200px);
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+    color: var(--color-muted);
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+}
+
+.ProseMirror pre {
+    background: #1e1e1e;
+    border-radius: 0.5rem;
+    color: #fff;
+    font-family: 'JetBrainsMono', monospace;
+    padding: 1rem;
+    margin: 1.5rem 0;
+}
+
+.ProseMirror pre code {
+    color: inherit;
+    padding: 0;
+    background: none;
+    font-size: 0.9rem;
+}
+
+.ProseMirror blockquote {
+    border-left: 3px solid var(--color-primary);
+    margin: 1.5rem 0;
+    padding-left: 1rem;
+    font-style: italic;
+    color: var(--color-muted);
+}
+
+.ProseMirror hr {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: 2rem 0;
+}
+
+/* Base tailwind prose overrides for our dark theme */
+.prose-invert {
+    color: var(--color-foreground) !important;
+}
+
+.prose-invert h1,
+.prose-invert h2,
+.prose-invert h3,
+.prose-invert h4,
+.prose-invert h5,
+.prose-invert h6,
+.prose-invert strong {
+    color: var(--color-foreground) !important;
+}
+
+.prose-invert a {
+    color: var(--color-primary) !important;
+}
+
+/* Collaborative Cursors (to be used later) */
+.collaboration-cursor__caret {
+    border-left: 2px solid #000;
+    border-right: 2px solid #000;
+    margin-left: -2px;
+    margin-right: -2px;
+    pointer-events: none;
+    position: relative;
+    word-break: normal;
+}
+
+.collaboration-cursor__label {
+    border-radius: 3px 3px 3px 0;
+    color: #0d0d0d;
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 600;
+    left: -2px;
+    line-height: normal;
+    padding: 2px 6px;
+    position: absolute;
+    top: -1.6em;
+    user-select: none;
+    white-space: nowrap;
+}
