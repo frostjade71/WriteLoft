@@ -30,7 +30,7 @@ export function ThemeToggle() {
     // or rendering it in a disabled state
     if (!mounted) {
         return <div className="theme-switch-wrapper opacity-0" aria-hidden="true">
-            <input type="checkbox" className="theme-checkbox" checked={false} readOnly />
+            <input type="checkbox" className="theme-checkbox" checked={false} readOnly suppressHydrationWarning />
         </div>;
     }
 
@@ -38,6 +38,7 @@ export function ThemeToggle() {
         <div className="theme-switch-wrapper flex items-center">
             <input
                 type="checkbox"
+                suppressHydrationWarning
                 className="theme-checkbox"
                 checked={isDark}
                 onChange={toggleTheme}

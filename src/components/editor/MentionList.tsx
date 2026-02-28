@@ -70,7 +70,7 @@ export const MentionList = forwardRef((props: SuggestionProps<MentionNode>, ref)
                     onClick={() => selectItem(index)}
                 >
                     {item.avatarUrl ? (
-                        <img src={item.avatarUrl} alt="" className="h-6 w-6 rounded-full" />
+                        <img src={item.avatarUrl} alt="" className="h-6 w-6 rounded-full" referrerPolicy="no-referrer" />
                     ) : (
                         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-xs text-primary font-medium">
                             {item.label[0]?.toUpperCase()}

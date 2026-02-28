@@ -25,7 +25,7 @@ export function InviteMemberModal({ workspaceId }: { workspaceId: string }) {
             } else {
                 setIsOpen(false);
             }
-        } catch (err) {
+        } catch (_err) {
             setError("Something went wrong. Please try again.");
         } finally {
             setIsLoading(false);

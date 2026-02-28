@@ -1,15 +1,16 @@
 import { getWorkspaces, createWorkspace } from "../actions";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
+import { MobileMenuButton } from "@/components/layout/MobileMenuButton";
 
 export default async function DashboardPage() {
     const workspaces = await getWorkspaces();
 
     return (
         <div className="flex flex-col h-full">
-            <Header breadcrumbs={<span className="text-foreground">Workspaces</span>} />
+            <Header breadcrumbs={<span className="text-foreground">Workspaces</span>} mobileMenuButton={<MobileMenuButton />} />
 
-            <div className="flex-1 p-8">
+            <div className="flex-1 p-4 md:p-8">
                 {/* Header Text */}
                 <div className="mb-8">
                     <h1 className="text-2xl font-bold text-foreground title-splash">Workspaces</h1>
@@ -25,11 +26,13 @@ export default async function DashboardPage() {
                             name="name"
                             type="text"
                             required
+                            suppressHydrationWarning
                             placeholder="New workspace name..."
                             className="flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm text-foreground placeholder-muted outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
                         />
                         <button
                             type="submit"
+                            suppressHydrationWarning
                             className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover cursor-pointer"
                         >
                             + Create
@@ -86,7 +89,7 @@ export default async function DashboardPage() {
                                     <p className="text-xs text-muted">
                                         Owner: {ws.owner?.name || ws.owner?.email || "—"}
                                     </p>
-                                    <p className="mt-1 text-xs text-muted">
+                                    <p suppressHydrationWarning className="mt-1 text-xs text-muted">
                                         Created{" "}
                                         {new Date(ws.created_at).toLocaleDateString("en-US", {
                                             month: "short",

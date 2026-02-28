@@ -78,6 +78,7 @@ export function NotificationBell({ userId }: { userId: string }) {
         <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
+                suppressHydrationWarning
                 className="relative p-2 text-muted hover:text-foreground transition-colors rounded-full hover:bg-surface"
                 aria-label="Notifications"
             >

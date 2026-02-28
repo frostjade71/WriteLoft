@@ -1,9 +1,12 @@
-import { getNoteById, deleteNote, getCommentsByNoteId } from "../../actions";
+import { getNoteById, getCommentsByNoteId } from "../../actions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Editor } from "@/components/editor/Editor";
 import { CommentSection } from "@/components/editor/CommentSection";
 import { Header } from "@/components/layout/Header";
+import { MobileMenuButton } from "@/components/layout/MobileMenuButton";
+import { NoteHeaderAction } from "./NoteHeaderAction";
+import { MobileCommentsModal } from "@/components/editor/MobileCommentsModal";
 
 // Generate a random stable color for the user's cursor
 function getUserColor(userId: string) {
@@ -45,19 +48,21 @@ export default async function NotePage({
     // The database will reject unauthorized saves
     const canEdit = true;
 
-    // Since we don't fetch the current user's full name here easily, we construct a basic object
-    // Next step will use the Supabase auth session to get the real name
-    const currentUser = {
-        id: currentUserId,
-        name: "Me", // We'll refine this later or get from context
-        color: getUserColor(currentUserId)
-    };
-
     const workspaceMembers = note.workspace?.workspace_members?.map((member: any) => ({
         id: member.user.id,
         name: member.user.name || member.user.email,
         avatarUrl: member.user.avatar_url,
     })) || [];
+
+    // Find the current user from the workspace members list to get their real name and avatar
+    const currentMember = workspaceMembers.find((m: any) => m.id === currentUserId);
+
+    const currentUser = {
+        id: currentUserId,
+        name: currentMember?.name || "Me",
+        color: getUserColor(currentUserId),
+        avatarUrl: currentMember?.avatarUrl
+    };
 
     return (
         <div className="flex flex-col h-full">
@@ -76,21 +81,31 @@ export default async function NotePage({
                     </>
                 }
                 actions={canEdit ? (
-                    <form action={deleteNote}>
-                        <input type="hidden" name="noteId" value={note.id} />
-                        <input type="hidden" name="workspaceId" value={workspaceId} />
-                        <button
-                            type="submit"
-                            className="text-sm font-medium text-danger hover:text-danger/80 transition-colors cursor-pointer block"
-                        >
-                            Delete Note
-                        </button>
-                    </form>
-                ) : undefined}
+                    <div className="flex items-center gap-1">
+                        <MobileCommentsModal
+                            noteId={note.id}
+                            currentUser={currentUser}
+                            initialComments={initialComments as any}
+                            workspaceMembers={workspaceMembers}
+                        />
+                        <NoteHeaderAction
+                            note={note}
+                            workspaceId={workspaceId}
+                        />
+                    </div>
+                ) : (
+                    <MobileCommentsModal
+                        noteId={note.id}
+                        currentUser={currentUser}
+                        initialComments={initialComments as any}
+                        workspaceMembers={workspaceMembers}
+                    />
+                )}
+                mobileMenuButton={<MobileMenuButton />}
             />
 
             {/* Main Content Area */}
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
                 {/* Editor Area */}
                 <div className="flex-1 overflow-hidden relative">
                     <Editor
@@ -103,13 +118,15 @@ export default async function NotePage({
                     />
                 </div>
 
-                {/* Comments Sidebar */}
-                <CommentSection
-                    noteId={note.id}
-                    currentUser={currentUser}
-                    initialComments={initialComments as any}
-                    workspaceMembers={workspaceMembers}
-                />
+                {/* Comments Sidebar — hidden on mobile, replaced by MobileCommentsModal */}
+                <div className="hidden md:block">
+                    <CommentSection
+                        noteId={note.id}
+                        currentUser={currentUser}
+                        initialComments={initialComments as any}
+                        workspaceMembers={workspaceMembers}
+                    />
+                </div>
             </div>
         </div>
     );

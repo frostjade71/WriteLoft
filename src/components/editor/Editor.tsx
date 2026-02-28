@@ -10,7 +10,9 @@ import Mention from "@tiptap/extension-mention";
 import tippy, { Instance as TippyInstance } from "tippy.js";
 import { common, createLowlight } from "lowlight";
 import * as Y from "yjs";
-import { useEffect, useState } from "react";
+import { prosemirrorJSONToYDoc } from "y-prosemirror";
+import { getSchema } from "@tiptap/core";
+import { useEffect, useState, useRef } from "react";
 import { Toolbar } from "./Toolbar";
 import { PresenceIndicator } from "./PresenceIndicator";
 import { MentionList } from "./MentionList";
@@ -30,18 +32,10 @@ interface EditorProps {
     workspaceMembers: { id: string; name: string; avatarUrl?: string }[];
 }
 
-export function Editor({
-    noteId,
-    initialContent,
-    title,
-    currentUser,
-    canEdit,
-    workspaceMembers,
-}: EditorProps) {
+export function Editor(props: EditorProps) {
     const [ydoc, setYdoc] = useState<Y.Doc | null>(null);
     const [provider, setProvider] = useState<SupabaseProvider | null>(null);
-    const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
-    const [currentTitle, setCurrentTitle] = useState(title);
+    const [docReady, setDocReady] = useState(false);
 
     // Initialize Yjs and Supabase Realtime Provider
     useEffect(() => {
@@ -49,25 +43,94 @@ export function Editor({
         setYdoc(doc);
 
         const supabase = createClient();
-        const newProvider = new SupabaseProvider(doc, supabase, `note-${noteId}`, {
+        const newProvider = new SupabaseProvider(doc, supabase, `note-${props.noteId}`, {
             onConnect: () => console.log("Connected to collab room"),
             onDisconnect: () => console.log("Disconnected from collab room"),
         });
 
-        newProvider.awareness.setLocalStateField("user", currentUser);
+        // Wait for peer sync before loading from DB.
+        // If a peer responds, we get their Y.Doc state (no DB load needed).
+        // If no peer responds within 1.5s, load initial content from the database.
+        // TipTap is NOT rendered until one of these completes (docReady).
+        let peerSynced = false;
+
+        newProvider.onSyncCallback = () => {
+            peerSynced = true;
+            setDocReady(true);
+        };
+
+        const dbFallbackTimer = setTimeout(() => {
+            if (!peerSynced) {
+                if (props.initialContent) {
+                    try {
+                        const schema = getSchema([
+                            StarterKit.configure({ history: false, codeBlock: false }),
+                            CodeBlockLowlight.configure({ lowlight }),
+                            Placeholder,
+                        ]);
+                        const tempDoc = prosemirrorJSONToYDoc(schema, props.initialContent, "default");
+                        const update = Y.encodeStateAsUpdate(tempDoc);
+                        Y.applyUpdate(doc, update);
+                        tempDoc.destroy();
+                    } catch (e) {
+                        console.warn("[YJS] Failed to preload initial content:", e);
+                    }
+                }
+                setDocReady(true);
+            }
+        }, 1500);
+
         setProvider(newProvider);
 
         return () => {
+            clearTimeout(dbFallbackTimer);
             newProvider.destroy();
             doc.destroy();
         };
-    }, [noteId, currentUser]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [props.noteId]);
+
+    // Update awareness when currentUser changes (separate from provider lifecycle)
+    useEffect(() => {
+        if (provider) {
+            provider.awareness.setLocalStateField("user", props.currentUser);
+        }
+    }, [provider, props.currentUser]);
+
+    if (!ydoc || !provider || !docReady) {
+        return (
+            <div className="flex h-full flex-col items-center justify-center bg-background text-muted-foreground">
+                <div className="animate-pulse">Loading editor workspace...</div>
+            </div>
+        );
+    }
+
+    return <TiptapEditor {...props} ydoc={ydoc} provider={provider} />;
+}
+
+interface TiptapEditorProps extends EditorProps {
+    ydoc: Y.Doc;
+    provider: SupabaseProvider;
+}
+
+function TiptapEditor({
+    noteId,
+    initialContent,
+    title,
+    currentUser,
+    canEdit,
+    workspaceMembers,
+    ydoc,
+    provider,
+}: TiptapEditorProps) {
+    const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
+    const [currentTitle, setCurrentTitle] = useState(title);
 
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
-                // @ts-expect-error - history configuration is valid but types might be outdated
                 history: false,
+                codeBlock: false, // Prevent duplicate extension warning
             }),
             Placeholder.configure({
                 placeholder: "Start typing here... Use @ to tag teammates",
@@ -76,6 +139,8 @@ export function Editor({
             CodeBlockLowlight.configure({
                 lowlight,
             }),
+            Collaboration.configure({ document: ydoc }),
+            CollaborationCursor.configure({ provider, user: currentUser }),
             Mention.configure({
                 HTMLAttributes: {
                     class: "mention",
@@ -139,48 +204,45 @@ export function Editor({
                 },
             }),
         ],
-        content: ydoc && provider ? undefined : initialContent,
+        // Do not pass initialContent directly when using Collaboration!
+        // The ydoc will handle initialization.
+        content: undefined,
         editable: canEdit,
-        onUpdate: () => {
-            setSaveStatus("saving");
-        },
         immediatelyRender: false,
     });
 
-    useEffect(() => {
-        if (!editor || !ydoc || !provider) return;
+    // Auto-save with proper debouncing via ref
+    const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-        editor.extensionManager.extensions.push(
-            Collaboration.configure({
-                document: ydoc,
-            })
-        );
-
-        editor.extensionManager.extensions.push(
-            CollaborationCursor.configure({
-                provider,
-                user: currentUser,
-            })
-        );
-
-        if (ydoc.getText("default").length === 0 && initialContent) {
-            editor.commands.setContent(initialContent, { emitUpdate: false });
-        }
-    }, [editor, ydoc, provider, currentUser, initialContent]);
-
-    // Auto-save effect
     useEffect(() => {
         if (!editor || !canEdit) return;
 
-        const timeout = setTimeout(async () => {
-            if (saveStatus === "saving") {
-                await updateNoteContent(noteId, editor.getJSON(), currentTitle);
-                setSaveStatus("saved");
-            }
-        }, 3000);
+        const handleUpdate = () => {
+            setSaveStatus("saving");
 
-        return () => clearTimeout(timeout);
-    }, [editor?.getJSON(), currentTitle, saveStatus, canEdit, noteId]);
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+            }
+
+            saveTimerRef.current = setTimeout(async () => {
+                try {
+                    await updateNoteContent(noteId, editor.getJSON(), currentTitle);
+                    setSaveStatus("saved");
+                } catch (e) {
+                    console.error("Auto-save failed:", e);
+                }
+            }, 3000);
+        };
+
+        editor.on("update", handleUpdate);
+
+        return () => {
+            editor.off("update", handleUpdate);
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+            }
+        };
+    }, [editor, canEdit, noteId, currentTitle]);
 
     const handleTitleBlur = async () => {
         if (currentTitle !== title && canEdit) {
@@ -210,7 +272,7 @@ export function Editor({
                     <span className="text-xs text-muted">
                         {saveStatus === "saving" ? "Saving..." : "Saved"}
                     </span>
-                    <PresenceIndicator editor={editor} currentUser={currentUser} />
+                    <PresenceIndicator editor={editor} provider={provider} currentUser={currentUser} />
                 </div>
             </div>
 
@@ -224,3 +286,4 @@ export function Editor({
         </div>
     );
 }
+

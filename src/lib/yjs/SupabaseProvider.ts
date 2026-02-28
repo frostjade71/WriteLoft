@@ -1,8 +1,6 @@
 import * as Y from "yjs";
 import * as awarenessProtocol from "y-protocols/awareness";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import * as encoding from "lib0/encoding";
-import * as decoding from "lib0/decoding";
 
 // Custom Yjs Provider for Supabase Realtime
 export class SupabaseProvider {
@@ -10,7 +8,10 @@ export class SupabaseProvider {
     public awareness: awarenessProtocol.Awareness;
     private channel: RealtimeChannel;
     private isSynced: boolean = false;
+    private isSubscribed: boolean = false;
     private resyncInterval: any;
+    private destroyed: boolean = false;
+    public onSyncCallback?: () => void;
 
     constructor(
         doc: Y.Doc,
@@ -31,35 +32,44 @@ export class SupabaseProvider {
         });
 
         // 2. Listen for remote Yjs document updates
-        this.channel.on("broadcast", { event: "update" }, ({ payload }) => {
-            const update = new Uint8Array(payload.update);
-            Y.applyUpdate(this.doc, update, this);
+        this.channel.on("broadcast", { event: "yjs-update" }, ({ payload }) => {
+            if (this.destroyed) return;
+            try {
+                const update = new Uint8Array(payload.update);
+                Y.applyUpdate(this.doc, update, this);
+            } catch (e) {
+                console.warn("[YJS] Failed to apply remote update:", e);
+            }
         });
 
         // 3. Listen for remote awareness (cursor) updates
-        this.channel.on("broadcast", { event: "awareness" }, ({ payload }) => {
+        this.channel.on("broadcast", { event: "yjs-awareness" }, ({ payload }) => {
+            if (this.destroyed) return;
             const update = new Uint8Array(payload.update);
             awarenessProtocol.applyAwarenessUpdate(this.awareness, update, this);
         });
 
         // 4. Request full state sync from other peers on join
-        this.channel.on("broadcast", { event: "sync-step-1" }, ({ payload }) => {
-            const replyPayload = {
+        this.channel.on("broadcast", { event: "yjs-sync-request" }, () => {
+            if (this.destroyed || !this.isSubscribed) return;
+            // Respond with our full state
+            this.sendBroadcast("yjs-sync-response", {
                 update: Array.from(Y.encodeStateAsUpdate(this.doc)),
-            };
-            this.channel.send({
-                type: "broadcast",
-                event: "sync-step-2",
-                payload: replyPayload,
             });
         });
 
-        this.channel.on("broadcast", { event: "sync-step-2" }, ({ payload }) => {
-            const update = new Uint8Array(payload.update);
-            Y.applyUpdate(this.doc, update, this);
-            if (!this.isSynced) {
-                this.isSynced = true;
-                this.config.onSync?.(true);
+        this.channel.on("broadcast", { event: "yjs-sync-response" }, ({ payload }) => {
+            if (this.destroyed) return;
+            try {
+                const update = new Uint8Array(payload.update);
+                Y.applyUpdate(this.doc, update, this);
+                if (!this.isSynced) {
+                    this.isSynced = true;
+                    this.config.onSync?.(true);
+                    this.onSyncCallback?.();
+                }
+            } catch (e) {
+                console.warn("[YJS] Failed to apply sync response:", e);
             }
         });
 
@@ -69,32 +79,32 @@ export class SupabaseProvider {
         // 6. Broadcast local awareness updates
         this.awareness.on("update", this.onAwarenessUpdate);
 
-        // Subscribe to the channel
+        // Subscribe to the channel - only send after SUBSCRIBED
         this.channel.subscribe((status) => {
+            if (this.destroyed) return;
+
             if (status === "SUBSCRIBED") {
+                this.isSubscribed = true;
                 this.config.onConnect?.();
+
                 // Ask for current state from peers
-                this.channel.send({
-                    type: "broadcast",
-                    event: "sync-step-1",
-                    payload: { stateVector: Array.from(Y.encodeStateVector(this.doc)) },
-                });
+                this.sendBroadcast("yjs-sync-request", {});
 
                 // Broadcast local awareness periodically to keep it alive
                 this.resyncInterval = setInterval(() => {
+                    if (this.destroyed || !this.isSubscribed) return;
                     if (this.awareness.getLocalState() !== null) {
                         const update = awarenessProtocol.encodeAwarenessUpdate(
                             this.awareness,
                             [this.doc.clientID]
                         );
-                        this.channel.send({
-                            type: "broadcast",
-                            event: "awareness",
-                            payload: { update: Array.from(update) },
+                        this.sendBroadcast("yjs-awareness", {
+                            update: Array.from(update),
                         });
                     }
                 }, 5000);
             } else {
+                this.isSubscribed = false;
                 this.isSynced = false;
                 this.config.onSync?.(false);
                 if (status === "CLOSED" || status === "CHANNEL_ERROR") {
@@ -104,13 +114,24 @@ export class SupabaseProvider {
         });
     }
 
+    /**
+     * Only send via WebSocket when subscribed. 
+     * Avoids the REST API fallback that doesn't broadcast to other clients.
+     */
+    private sendBroadcast(event: string, payload: any) {
+        if (!this.isSubscribed || this.destroyed) return;
+        this.channel.send({
+            type: "broadcast",
+            event,
+            payload,
+        });
+    }
+
     private onUpdate = (update: Uint8Array, origin: any) => {
-        // Only broadcast if the update came from local changes, not from network
+        // Only broadcast if the update came from local changes, not from network.
         if (origin !== this) {
-            this.channel.send({
-                type: "broadcast",
-                event: "update",
-                payload: { update: Array.from(update) },
+            this.sendBroadcast("yjs-update", {
+                update: Array.from(update),
             });
         }
     };
@@ -125,15 +146,15 @@ export class SupabaseProvider {
                 this.awareness,
                 changedClients
             );
-            this.channel.send({
-                type: "broadcast",
-                event: "awareness",
-                payload: { update: Array.from(update) },
+            this.sendBroadcast("yjs-awareness", {
+                update: Array.from(update),
             });
         }
     };
 
     public destroy() {
+        this.destroyed = true;
+        this.isSubscribed = false;
         clearInterval(this.resyncInterval);
         this.doc.off("update", this.onUpdate);
         this.awareness.off("update", this.onAwarenessUpdate);

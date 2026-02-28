@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="src/app/favicon/WriteLoft-Logo.png" alt="WriteLoft Logo" width="200">
+# <img src="src/app/favicon/WriteLoft_Newlogo [881BCE4].webp" alt="WriteLoft Logo" width="200">
 
 [![Next.js](https://img.shields.io/badge/Next.js-14%2B-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
